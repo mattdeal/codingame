@@ -19,7 +19,7 @@ class Card:
     def will_kill(self, other_card):
         # if "W" in other_card.abilities:
         #     return False
-        if "L" in self.abilities:
+        if self.card_type == other_card.card_type and "L" in self.abilities:
             return True
         if self.attack > other_card.defense:
             return True
@@ -116,6 +116,7 @@ LOCATION_OPP = 2
 while True:
     mode = "DRAFT"
     my_mana = 0
+    enemy_health = 0
 
     for i in range(2):
         player_health, player_mana, player_deck, player_rune = [int(j) for j in input().split()]
@@ -127,6 +128,10 @@ while True:
             # detect mode
             if player_mana > 0:
                 mode = "BATTLE"
+
+        # detect enemy player health
+        if i > 0:
+            enemy_health = player_health
 
         # todo: runes?  ignore for now
         # todo: deck?
@@ -180,8 +185,8 @@ while True:
             test_card = cards[card_no]
 
             # todo: remove this once the bot can use items correctly, temp fix to not select items
-            if test_card.card_type > 0:
-                continue
+            # if test_card.card_type > 0:
+            #     continue
 
             if card_rank[test_card.card_number] > best_value:
                 best_card = card_no
@@ -192,7 +197,9 @@ while True:
         debug("battle")
         battle_command = ""
         target = -1
+        played_cards = {}
 
+        # get summoned creatures
         my_board_by_attack = {}
         for card in my_board.values():
             key = card.attack
@@ -203,10 +210,31 @@ while True:
             debug("key %s" % key)
 
         sorted_by_attack = OrderedDict(sorted(my_board_by_attack.items(), key=lambda t: t[0]))
-
         debug("myboard %s, sorted %s" % (len(my_board), len(sorted_by_attack)))
 
-        #  order enemies by G and defense
+        # get items
+        my_items_green = {}
+        my_items_blue = {}
+        my_items_red = {}
+        for card in my_hand.values():
+            if card.card_type == CARD_TYPE_ITEM_RED:
+                my_items_red[card.instance_id] = card
+            elif card.card_type == CARD_TYPE_ITEM_BLUE:
+                my_items_blue[card.instance_id] = card
+            elif card.card_type == CARD_TYPE_ITEM_GREEN:
+                my_items_green[card.instance_id] = card
+
+        # apply green items
+        for item in my_items_green.values():
+            for card in sorted_by_attack.values():
+                if item.cost <= my_mana:
+                    debug("applying %s to %s" % (item.instance_id, card.instance_id))
+                    battle_command += "USE %s %s;" % (item.instance_id, card.instance_id)
+                    played_cards[card.instance_id] = card
+                    my_mana -= item.cost
+                    break
+
+        # order enemies by G and defense
         if len(enemy_board) > 0:
             debug("creatures")
 
@@ -219,6 +247,44 @@ while True:
                         key += .1
 
                     target_creatures[key] = enemy
+
+            # If creatures, try to kill most dangerous creature with red item
+            if len(enemy_board) > 0 and len(my_items_red) > 0:
+                enemies_by_attack = {}
+                for enemy in enemy_board.values():
+                    key = enemy.attack
+                    while enemies_by_attack.get(key, None):
+                        key += enemy.defense
+
+                    enemies_by_attack[key] = enemy
+
+                debug("creatures exist, attempt to kill with item")
+                sorted_targets = OrderedDict(reversed(sorted(enemies_by_attack.items(), key=lambda t: t[0])))
+
+                for key in sorted_targets.keys():
+                    enemy = sorted_targets[key]
+                    debug("target %s" % enemy.instance_id)
+                    for card in my_items_red.values():
+                        if played_cards.get(card.instance_id, None):
+                            continue
+
+                        # todo: rules for item combinations
+
+                        # don't use remove G cards on creatures that do not have G
+                        # todo: replace this with specific rules for all red cards
+                        if "G" == card.abilities and "G" not in enemy.abilities:
+                            continue
+
+                        if card.cost <= my_mana and enemy.cost >= card.cost:
+                            debug("play %s" % card.instance_id)
+                            battle_command += "USE %s %s;" % (card.instance_id, enemy.instance_id)
+                            played_cards[card.instance_id] = card
+                            my_mana -= card.cost
+
+                            if card.will_kill(enemy):
+                                del enemy_board[enemy.instance_id]
+                                debug("delete creature %s from enemy_board" % enemy.instance_id)
+                            break
 
             # if creatures_g, try to kill them without loss
             if len(target_creatures) > 0:
@@ -234,7 +300,7 @@ while True:
                             debug("skip due to type")
                             continue
 
-                        if str(card.instance_id) in battle_command:
+                        if played_cards.get(card.instance_id, None):
                             debug("skip due to previous command")
                             continue
 
@@ -246,6 +312,7 @@ while True:
                             del target_creatures[key]
                             del enemy_board[enemy.instance_id]
                             battle_command += "ATTACK %s %s;" % (card.instance_id, enemy.instance_id)
+                            played_cards[card.instance_id] = card
                             debug("ATTACK %s %s;" % (card.instance_id, enemy.instance_id))
                             debug("enemy %s dead" % enemy.instance_id)
                             # enemy is dead, break loop so we don't over target
@@ -264,7 +331,7 @@ while True:
                             debug("skip due to type")
                             continue
 
-                        if str(card.instance_id) in battle_command:
+                        if played_cards.get(card.instance_id, None):
                             debug("skip due to previous command")
                             continue
 
@@ -281,6 +348,7 @@ while True:
                             del enemy_board[enemy.instance_id]
                             del my_board[card.instance_id]
                             battle_command += "ATTACK %s %s;" % (card.instance_id, enemy.instance_id)
+                            played_cards[card.instance_id] = card
                             debug("ATTACK %s %s;" % (card.instance_id, enemy.instance_id))
                             # enemy is dead, skip so we don't over target
                             break
@@ -297,7 +365,7 @@ while True:
                             debug("skip due to type")
                             continue
 
-                        if str(card.instance_id) in battle_command:
+                        if played_cards.get(card.instance_id, None):
                             debug("skip due to previous command")
                             continue
 
@@ -310,6 +378,7 @@ while True:
                             continue
 
                         battle_command += "ATTACK %s %s;" % (card.instance_id, enemy.instance_id)
+                        played_cards[card.instance_id] = card
                         debug("ATTACK %s %s;" % (card.instance_id, enemy.instance_id))
 
                         if enemy.will_kill(card):
@@ -327,6 +396,27 @@ while True:
                         else:
                             enemy.defense -= card.attack
 
+            # test for G again, if there are no enemies with G, try to kill player
+            sorted_targets = OrderedDict(sorted(target_creatures.items(), key=lambda t: t[0]))
+            debug("len sorted targets %s" % len(sorted_targets))
+            if len(sorted_targets) < 1:
+                total_damage = 0
+                for card in my_board.values():
+                    if played_cards.get(card.instance_id, None):
+                        continue
+
+                    total_damage += card.attack
+
+                if total_damage >= enemy_health:
+                    debug("can kill opponent directly")
+                    for card in my_board.values():
+                        if played_cards.get(card.instance_id, None):
+                            continue
+
+                        battle_command += "ATTACK %s %s;" % (card.instance_id, -1)
+                        played_cards[card.instance_id] = card
+
+            # cannot kill player directly, clear board
             if len(enemy_board) > 0:
                 target_creatures = {}
                 for enemy in enemy_board.values():
@@ -348,7 +438,7 @@ while True:
                             debug("skip %s" % card.instance_id)
                             continue
 
-                        if str(card.instance_id) in battle_command:
+                        if played_cards.get(card.instance_id, None):
                             debug("skip %s" % card.instance_id)
                             continue
 
@@ -357,6 +447,7 @@ while True:
                             del enemy_board[enemy.instance_id]
                             card.defense -= enemy.attack
                             battle_command += "ATTACK %s %s;" % (card.instance_id, enemy.instance_id)
+                            played_cards[card.instance_id] = card
                             debug("ATTACK %s %s;" % (card.instance_id, enemy.instance_id))
                             break
 
@@ -373,7 +464,7 @@ while True:
                                 debug("skip %s" % card.instance_id)
                                 continue
 
-                            if str(card.instance_id) in battle_command:
+                            if played_cards.get(card.instance_id, None):
                                 debug("skip %s" % card.instance_id)
                                 continue
 
@@ -390,6 +481,7 @@ while True:
                                 del enemy_board[enemy.instance_id]
                                 del my_board[card.instance_id]
                                 battle_command += "ATTACK %s %s;" % (card.instance_id, enemy.instance_id)
+                                played_cards[card.instance_id] = card
                                 debug("ATTACK %s %s;" % (card.instance_id, enemy.instance_id))
                                 break
 
@@ -406,7 +498,7 @@ while True:
                                 debug("skip %s" % card.instance_id)
                                 continue
 
-                            if str(card.instance_id) in battle_command:
+                            if played_cards.get(card.instance_id, None):
                                 debug("skip %s" % card.instance_id)
                                 continue
 
@@ -419,6 +511,7 @@ while True:
                                 continue
 
                             battle_command += "ATTACK %s %s;" % (card.instance_id, enemy.instance_id)
+                            played_cards[card.instance_id] = card
                             debug("ATTACK %s %s;" % (card.instance_id, enemy.instance_id))
 
                             if enemy.will_kill(card):
@@ -444,11 +537,12 @@ while True:
                         debug("skip %s" % card.instance_id)
                         continue
 
-                    if str(card.instance_id) in battle_command:
+                    if played_cards.get(card.instance_id, None):
                         debug("skip %s" % card.instance_id)
                         continue
 
                     battle_command += "ATTACK %s %s;" % (card.instance_id, -1)
+                    played_cards[card.instance_id] = card
                     debug("ATTACK %s %s;" % (card.instance_id, -1))
             else:
                 debug("enemy board is empty, attack player")
@@ -458,11 +552,12 @@ while True:
                         debug("skip %s" % card.instance_id)
                         continue
 
-                    if str(card.instance_id) in battle_command:
+                    if played_cards.get(card.instance_id, None):
                         debug("skip %s" % card.instance_id)
                         continue
 
                     battle_command += "ATTACK %s %s;" % (card.instance_id, -1)
+                    played_cards[card.instance_id] = card
                     debug("ATTACK %s %s;" % (card.instance_id, -1))
 
         else:
@@ -477,11 +572,12 @@ while True:
                     debug("skip %s" % card.instance_id)
                     continue
 
-                if str(card.instance_id) in battle_command:
+                if played_cards.get(card.instance_id, None):
                     debug("skip %s" % card.instance_id)
                     continue
 
                 battle_command += "ATTACK %s %s;" % (card.instance_id, -1)
+                played_cards[card.instance_id] = card
                 debug("ATTACK %s %s;" % (card.instance_id, -1))
 
         # summon more creatures
@@ -506,6 +602,7 @@ while True:
                     card_to_play = my_hand[selected_card]
                     if card_to_play.cost <= my_mana:
                         battle_command += "SUMMON %s;" % card_to_play.instance_id
+                        played_cards[card.instance_id] = card_to_play
 
                         if "C" in card_to_play.abilities:
                             battle_command += "ATTACK %s %s;" % (card_to_play.instance_id, -1)
@@ -522,8 +619,13 @@ while True:
                 if num_my_creatures > 5:
                     can_play_card = False
 
-        # todo: look for items to play
-        # - if G in item.abilities, target C without G
+        # use blue items
+        for card in my_items_blue.values():
+            debug("looking for blue items")
+            if card.cost <= my_mana:
+                debug("use %s" % card.instance_id)
+                battle_command += "USE %s %s" % (card.instance_id, -1)
+                my_mana -= card.cost
 
         # issue attack orders
         if len(battle_command) > 0:
