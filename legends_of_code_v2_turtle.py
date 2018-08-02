@@ -224,6 +224,7 @@ while True:
                         if str(my_card.instance_id) not in battle_command:
                             battle_command += "ATTACK %s %s;" % (my_card.instance_id, enemy_card.instance_id)
                             enemy_g_remaining -= 1
+                            num_enemy_creatures -= 1
 
             # todo: find items that can kill enemy G
             if enemy_g_remaining > 0:
@@ -248,6 +249,7 @@ while True:
                                 battle_command += "ATTACK %s %s;" % (my_card.instance_id, enemy_card.instance_id)
                                 enemy_g_remaining -= 1
                                 num_my_creatures -= 1
+                                num_enemy_creatures -=1
 
             # find cards that will damage enemy G
             # sacrifice to kill G mod
@@ -269,12 +271,13 @@ while True:
                                 battle_command += "ATTACK %s %s;" % (my_card.instance_id, enemy_card.instance_id)
                                 enemy_g_remaining -= 1
                                 num_my_creatures -= 1
+                                num_enemy_creatures -= 1
                         else:
                             if str(my_card.instance_id) not in battle_command:
                                 battle_command += "ATTACK %s %s;" % (my_card.instance_id, enemy_card.instance_id)
                                 enemy_card.defense -= my_card.attack
                                 num_my_creatures -= 1
-
+            
             # summon more creatures
             if num_my_creatures < 6:
                 debug("look for creatures")
