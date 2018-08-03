@@ -185,8 +185,8 @@ while True:
             test_card = cards[card_no]
 
             # todo: remove this once the bot can use items correctly, temp fix to not select items
-            # if test_card.card_type > 0:
-            #     continue
+            if test_card.card_type > 0:
+                continue
 
             if card_rank[test_card.card_number] > best_value:
                 best_card = card_no
@@ -234,6 +234,7 @@ while True:
                     my_mana -= item.cost
                     card.attack += item.attack
                     card.defense += item.defense
+                    card.abilities += item.abilities
                     break
 
         # order enemies by G and defense
