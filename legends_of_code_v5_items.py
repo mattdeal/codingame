@@ -232,6 +232,8 @@ while True:
                     battle_command += "USE %s %s;" % (item.instance_id, card.instance_id)
                     played_cards[card.instance_id] = card
                     my_mana -= item.cost
+                    card.attack += item.attack
+                    card.defense += item.defense
                     break
 
         # order enemies by G and defense
@@ -602,7 +604,7 @@ while True:
                     card_to_play = my_hand[selected_card]
                     if card_to_play.cost <= my_mana:
                         battle_command += "SUMMON %s;" % card_to_play.instance_id
-                        played_cards[card.instance_id] = card_to_play
+                        played_cards[card_to_play.instance_id] = card_to_play
 
                         if "C" in card_to_play.abilities:
                             battle_command += "ATTACK %s %s;" % (card_to_play.instance_id, -1)
@@ -626,6 +628,8 @@ while True:
                 debug("use %s" % card.instance_id)
                 battle_command += "USE %s %s" % (card.instance_id, -1)
                 my_mana -= card.cost
+
+        # todo: use green items again
 
         # issue attack orders
         if len(battle_command) > 0:
