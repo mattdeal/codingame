@@ -203,6 +203,23 @@ class Game:
             if robot.x == 0:
                 self.assignments[robot.id] = None
                 self.destinations[robot.id] = None
+                continue
+
+            job = self.assignments[robot.id]
+            if job is None:
+                continue
+
+            dest = self.destinations[robot.id]
+            if dest is None:
+                continue
+
+            if job == 'COLLECT':
+                if self.grid.get_cell(dest.x, dest.y).amadeusium == '0':
+                    debug(f'robot {robot.id} cannot complete job, clearing')
+                    self.assignments[robot.id] = None
+                    self.destinations[robot.id] = None
+                    continue
+
 
     # If radar is available, assign the first available robot at base to request a radar
     def job_radar_get(self):
