@@ -227,7 +227,7 @@ class Game:
             debug('radar not available')
             return
 
-        if len(self.radars) > 7:
+        if len(self.radars) > 9:
             debug('radars are not needed')
             return
 
@@ -269,8 +269,12 @@ class Game:
             return Pos(17, 11)
         elif rad_count == 6:
             return Pos(22, 4)
-        else:
+        elif rad_count == 7:
             return Pos(22, 11)
+        elif rad_count == 8:
+            return Pos(26, 4)
+        else:
+            return Pos(26, 11)
 
     # Find robots with ore, and order them home
     def job_return(self):
