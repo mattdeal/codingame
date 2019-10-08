@@ -220,25 +220,6 @@ class Game:
                     self.destinations[robot.id] = None
                     continue
 
-
-    # If radar is available, assign the first available robot at base to request a radar
-    def job_radar_get(self):
-        if self.radar_cooldown > 0:
-            debug('radar not available')
-            return
-
-        if len(self.radars) > 9:
-            debug('radars are not needed')
-            return
-
-        debug('radar available')
-        for robot in self.my_robots:
-            if self.assignments.get(robot.id) is None and robot.x == 0:
-                debug(f'{robot.id} claimed radar')
-                self.assignments[robot.id] = 'RADAR_GET'
-                self.radar_cooldown = 4;
-                return
-
     # Direct robot carrying radar to a valid location
     def job_radar_use(self):
         for robot in self.my_robots:
@@ -254,27 +235,23 @@ class Game:
 
     # Get a position for radar
     def get_radar_position(self):
-        rad_count = len(self.radars)
-        if rad_count == 0:
-            return Pos(5, 4)
-        elif rad_count == 1:
-            return Pos(5, 11)
-        elif rad_count == 2:
-            return Pos(11, 4)
-        elif rad_count == 3:
-            return Pos(11, 11)
-        elif rad_count == 4:
-            return Pos(17, 4)
-        elif rad_count == 5:
-            return Pos(17, 11)
-        elif rad_count == 6:
-            return Pos(22, 4)
-        elif rad_count == 7:
-            return Pos(22, 11)
-        elif rad_count == 8:
-            return Pos(26, 4)
-        else:
-            return Pos(26, 11)
+        if self.radars is None or len(self.radars) == 0:
+            debug('no radars')
+            return radar_locations[0]
+
+        for location in radar_locations:
+            debug(f'location {location.x}, {location.y}')
+            valid = True
+
+            for radar in self.radars:
+                debug(f' - eval radar {radar.x}, {radar.y}')
+                if radar.x == location.x and radar.y == location.y:
+                    valid = False
+                    break
+
+            if valid:
+                debug(f'radar location {location.x}, {location.y}')
+                return location
 
     # Find robots with ore, and order them home
     def job_return(self):
@@ -343,9 +320,46 @@ class Game:
                 self.assignments[robot.id] = 'COLLECT'
                 break
 
+        # If radar is available, assign the first available robot at base to request a radar
+
+    def job_radar_get(self):
+        if self.radar_cooldown > 0:
+            debug('radar not available')
+            return
+
+        if self.get_radar_position() is None:
+            debug('no valid radar positions found')
+            return
+
+        # if len(self.radars) > 9:
+        #     debug('radars are not needed')
+        #     return
+
+        debug('radar available')
+        for robot in self.my_robots:
+            if self.assignments.get(robot.id) is None and robot.x == 0:
+                debug(f'{robot.id} claimed radar')
+                self.assignments[robot.id] = 'RADAR_GET'
+                self.radar_cooldown = 4;
+                return
+
 
 
 game = Game()
+
+radar_locations = [
+    Pos(9, 7),
+    Pos(5, 3),
+    Pos(5, 11),
+    Pos(13, 3),
+    Pos(13, 11),
+    Pos(17, 7),
+    Pos(21, 3),
+    Pos(21, 11),
+    Pos(25, 7),
+    Pos(29, 3),
+    Pos(29, 11)
+]
 
 # game loop
 while True:
