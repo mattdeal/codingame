@@ -1,5 +1,6 @@
 import sys
 import math
+import random
 
 # Deliver more amadeusium to hq (left side of the map) than your opponent. Use radars to find amadeusium but beware of traps!
 
@@ -26,6 +27,9 @@ class Pos:
 
     def distance(self, pos):
         return abs(self.x - pos.x) + abs(self.y - pos.y)
+
+    def __str__(self):
+        return f'({self.x},{self.y})'
 
 
 class Entity(Pos):
@@ -105,10 +109,14 @@ class Game:
         self.enemy_robots = []
         self.assignments = {}
         self.destinations = {}
+        self.turn_number = 0
 
     def update(self):
         # my_score: Players score
         self.my_score, self.enemy_score = [int(i) for i in input().split()]
+
+        # increment turn number
+        self.turn_number+=1
 
         # debug(f'my_score {game.my_score}, opp_score {game.enemy_score}')
 
@@ -147,6 +155,7 @@ class Game:
                 self.enemy_robots.append(Robot(x, y, type, id, item))
             elif type == TRAP:
                 self.traps.append(Entity(x, y, type, id))
+                debug(f'TRAP at {x}, {y}')
             elif type == RADAR:
                 self.radars.append(Entity(x, y, type, id))
 
@@ -163,6 +172,8 @@ class Game:
                 robot.wait(f'no assignment {robot.id}')
             elif assignment == 'RADAR_GET':
                 robot.request(RADAR, 'gimme dat')
+            elif assignment == 'TRAP_GET':
+                robot.request(TRAP, 'gimme dat')
             elif assignment == 'RADAR_USE':
                 if robot.distance(self.destinations.get(robot.id)) < 1:
                     robot.dig(robot.x, robot.y, 'deploy!')
@@ -170,11 +181,20 @@ class Game:
                     self.destinations[robot.id] = None
                 else:
                     robot.move(self.destinations.get(robot.id).x, self.destinations.get(robot.id).y, 'omw to rad loc')
+            elif assignment == 'TRAP_USE':
+                if robot.distance(self.destinations.get(robot.id)) < 1:
+                    robot.dig(robot.x, robot.y, 'deploy!')
+                    self.assignments[robot.id] = None
+                    self.destinations[robot.id] = None
+                else:
+                    robot.move(self.destinations.get(robot.id).x, self.destinations.get(robot.id).y, 'omw to trap loc')
             elif assignment == 'COLLECT':
                 dest = self.destinations[robot.id]
                 dist = robot.distance(dest)
                 if dist < 2:
                     robot.dig(dest.x, dest.y, 'diggy diggy hole')
+                    self.destinations[robot.id] = None
+                    self.assignments[robot.id] = None
                 else:
                     robot.move(dest.x, dest.y, 'omw to dig')
             elif assignment == 'RETURN':
@@ -184,17 +204,46 @@ class Game:
 
     def build_output(self):
         self.job_clear_complete()
+
         self.job_radar_get()
         self.job_radar_use()
 
-        # todo: bomb job
-        # - if bomb_cd = 0
-        # - iterate through robots at base (x = 0)
+        self.job_trap_get()
+        self.job_trap_use()
 
         self.job_return()
         self.job_collect()
 
-        # todo: dig randomly job (first few turns until radar is deployed)
+    # request a trap
+    def job_trap_get(self):
+        if self.trap_cooldown > 0:
+            debug('trap not available')
+            return
+
+        if self.get_trap_position() is None:
+            debug('no valid trap positions found')
+            return
+
+        debug('trap available')
+        for robot in self.my_robots:
+            if self.assignments.get(robot.id) is None and robot.x == 0:
+                debug(f'{robot.id} claimed trap')
+                self.assignments[robot.id] = 'TRAP_GET'
+                self.trap_cooldown = 4;
+                return
+
+    # find a location with ore and plant a bomb there
+    def job_trap_use(self):
+        for robot in self.my_robots:
+            if robot.item == TRAP:
+                debug(f'robot {robot.id} has trap')
+                if robot.x == 0:
+                    debug(f'robot {robot.id} at base')
+                    self.assignments[robot.id] = 'TRAP_USE'
+                    self.destinations[robot.id] = self.get_trap_position()
+                else:
+                    debug(f'robot {robot.id} moving to {self.destinations.get(robot.id)}')
+                return
 
     # clear jobs for robots at base
     # todo: clear jobs for robots that can no longer harvest
@@ -214,7 +263,7 @@ class Game:
                 continue
 
             if job == 'COLLECT':
-                if self.grid.get_cell(dest.x, dest.y).amadeusium == '0':
+                if self.grid.get_cell(dest.x, dest.y).amadeusium in ['0', '?']:
                     debug(f'robot {robot.id} cannot complete job, clearing')
                     self.assignments[robot.id] = None
                     self.destinations[robot.id] = None
@@ -253,6 +302,58 @@ class Game:
                 debug(f'radar location {location.x}, {location.y}')
                 return location
 
+    # Get a position for trap
+    def get_trap_position(self):
+        if self.traps is None or len(self.traps) == 0:
+            debug('no traps')
+            return Pos(15, 7)
+
+        ore_by_distance = {}
+        trap_bot = None
+
+        for y in range(height):
+            for x in range(width):
+                cell = self.grid.get_cell(x, y)
+                if cell.amadeusium == '?' or cell.amadeusium == '0':
+                    continue
+
+                # debug(cell.amadeusium)
+
+                for robot in self.my_robots:
+                    if robot.item != TRAP:
+                        continue
+
+                    trap_bot = robot.id
+
+                    dist = cell.distance(robot)
+                    if ore_by_distance.get(robot.id) is None:
+                        ore_by_distance[robot.id] = {}
+
+                    ore_by_distance[robot.id][dist] = cell
+
+        debug(f'trap calc ore_by_distance {len(ore_by_distance)}')
+
+        trap_pos = Pos(random.randint(5, 25), random.randint(5, 10))
+
+        if len(ore_by_distance) > 0:
+            trap_pos = ore_by_distance[trap_bot][max(ore_by_distance[trap_bot].keys())]
+
+        while True:
+            valid = True
+            for trap in self.traps:
+                if trap.x == trap_pos.x and trap.y == trap_pos.y:
+                    debug(f'invalid trap position, recalculating')
+                    valid = False
+                    break
+
+            if valid:
+                break
+            else:
+                trap_pos = Pos(random.randint(5, 25), random.randint(5, 10))
+
+        debug(f'trap_pos {trap_pos}')
+        return trap_pos
+
     # Find robots with ore, and order them home
     def job_return(self):
         for robot in self.my_robots:
@@ -290,8 +391,20 @@ class Game:
         debug(ore_by_distance)
 
         for robot in self.my_robots:
+            # if robot.item is not None and robot.item > -1:
+            #     debug(f'robot {robot.id} is carying {robot.item}')
+            #     continue
+
+            if self.assignments[robot.id] in ['RADAR_GET', 'RADAR_USE']:
+                debug(f'robot {robot.id} already has job')
+                continue
+
             if ore_by_distance.get(robot.id) is None:
-                debug(f'eval robot {robot.id}, no moves found')
+                if self.turn_number < 2:
+                    debug(f'eval robot {robot.id}, no moves found, moving to middle of field')
+                    self.destinations[robot.id] = Pos(robot.x + 10, robot.y)
+                    self.assignments[robot.id] = 'COLLECT'
+
                 continue
 
             debug(f'eval robot {robot.id}')
@@ -300,6 +413,11 @@ class Game:
 
             for d in sorted(options.keys()):
                 cell = options[d]
+                for trap in self.traps:
+                    if cell.x == trap.x and cell.y == trap.y:
+                        debug(f'cell {cell.x}, {cell.y} is trap, ignoring')
+                        continue
+
                 debug(f'dist {d}, cell {cell.x}, {cell.y}')
                 valid_destination = True
 
@@ -342,8 +460,6 @@ class Game:
                 self.assignments[robot.id] = 'RADAR_GET'
                 self.radar_cooldown = 4;
                 return
-
-
 
 game = Game()
 
